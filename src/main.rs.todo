@@ -1,0 +1,318 @@
+use futures::executor
+
+fn main() {
+	let tx, rx = fstream::new();
+	walk::walk("/tmp", tx)
+
+}
+    let (tx, mut rx) = mpsc::channel(10);
+
+mod walk {
+	use futures::channel::{mpsc,oneshot};
+	use super::fstream::{FsMsg};
+
+	pub async fn walk<P: AsRef<Path>>(path: P, fs: send::Dir) -> Result<Action> {
+		let d = std::fs::metadata(path)?;
+		if !d.is_dir() {
+			return Err(NotDirectory);
+		}
+		if let Down(d) = fs.dir(d)? {
+			walk_dir(path, d).await?;
+		}
+	}
+
+	pub async fn walk_dir(P: AsRef<Path>>(path: P, fs: send::Dir) -> Result<Option<send::Dir>> {
+		let mut fs = fs;
+		let contents = read_directory(path);
+		for c in contents {
+			if c.is_dir() {
+				match fs.dir(c)? {
+				case Down(fs1) =>
+					walk_dir(path + "/" + c.name(), fs1)?;
+				case Skip(fs1) =>
+					return fs1;
+				case End:
+					return Ok(None)
+				case Next(fs1) =>
+					fs = fs1;
+				}
+			} else {
+				match fs.file(c)? {
+				case Down(fsf) =>
+					fs = walk_file(path + "/" + c.name(), fsf);
+				case Skip(fs1) =>
+					return fs1
+				case Next(fs1) =>
+					fs = fs1
+				}
+			}
+		}
+		fs.end()?;
+	}
+}
+
+mod fstream {
+	use futures::channel::mpsc;
+	use futures::sink::SinkExt;
+	use std::sync::Arc;
+
+	#[derive(Debug,Copy,Clone)]
+	enum Action {
+		Down,
+		Next,
+		Skip,
+	}
+
+	#[derive(Debug,Clone)]
+	struct FsMsg (FsData, mpsc::Sender<Action>);
+
+	enum FsData {
+		// Root represents the root entry.
+		Root(String),
+		FileEntry(Stat),
+		DirEntry(Stat),
+		Data(Vec<u8>),
+		End,
+	}
+
+	// new creates sending and receiving halves of
+	// a channel that can be used to send the contents
+	// of the directory represented by dir, which must
+	// be a directory entry. It returns an error if dir
+	// does not represent a directory.
+	fn new() -> Result<(send.Root, recv.Root)> {
+		let tx, rx = mpsc::channel(0);
+		(send.new_root(tx), recv.new_root(rx))
+	}
+
+	mod send {
+
+		type Sender = mpsc::Sender<FsMsg>;
+
+		#[derive(Debug)]
+		pub struct Dir {
+			depth_n: i32,
+			c: Sender,
+			replyTx: mspc::Sender<Action>,
+			replyRx: mspc::Receiver<Action>,
+		}
+
+		struct Root {
+			dir: Dir,
+		}
+
+		fn new_root(c: Sender) -> Root {
+			let replyTx, replyRx = mpsc.channel();
+			Root{
+				dir: Dir{
+					depth: 0,
+					c: c,
+					replyTx: replyTx,
+					replyRx: replyRx,
+				}
+			}
+		}
+
+		pub impl Root {
+			pub async fn dir(self, stat: Stat) -> Result<Option<Dir>> {
+				match self.dir.dir(stat)? {
+				DirAction::Down(dir) =>
+					Ok(Some(dir))
+				_ =>
+					Ok(None)
+				}
+			}
+		}
+
+		pub impl Dir {
+			// file sends a file entry. The name should always compare
+			// greater than the previous entry sent for the directory.
+			// It's an error if stat represents a directory.
+			pub async fn file(self, stat: Stat) -> Result<FileAction> {
+				if stat.is_dir() {
+					return Err(Error::IsADirectory)
+				}
+				self.c.send(FsMsg(FsData::FileEntry(stat), self.reply.clone()).await?;
+				Ok(match self.reply.receive().await? {
+					Action::Down =>
+						FileAction::Down(Data{
+							depth_n: self.depth_n+1,
+							c: self.c,
+							reply: self.reply,
+						})
+					Action::Skip =>
+						if let Some(parent) = self.parent() {
+							FileAction::Skip(self.parent())
+						} else {
+							FileAction::End
+						}
+					Action::Next =>
+						FileAction::Next(self)
+					}
+				})
+			}
+
+			pub fn depth(&self) i32 {
+				self.depth_n
+			}
+
+			// dir sends a directory entry. The name should always compare
+			// greater than the previous entry sent for the directory.
+			// It's an error if stat doesn't represent a directory.
+			pub async fn dir(self, stat: Stat) -> Result<DirAction> {
+				if !stat.is_dir() {
+					return Err(Error::NotADirectory)
+				}
+				self.c.send(FsMsg(FsData::DirEntry(stat), self.reply.clone()).await?;
+				Ok(match self.reply.receive().await? {
+					Action::Down =>
+						FileAction::Down(Dir{
+							depth_n: self.depth_n+1,
+							c: self.c,
+							reply: self.reply,
+						})
+					Action::Skip =>
+						if let Some(parent) = self.parent() {
+							FileAction::Skip(parent)
+						} else {
+							FileAction::End
+						}
+					Action::Next =>
+						FileAction::Next(self)
+					}
+				})
+			}
+
+			// end indicates the end of the directory. It returns the parent
+			// directory or None if the parent is the root.
+			pub async fn end(self) -> Result<Option<Dir>> {
+				self.c.send(FsMsg(FsData::End, self.reply.clone()).await?;
+				self.reply.receive().await?
+				Ok(self.parent())
+			}
+
+			fn parent(self) -> Option<Dir> {
+				if self.depth <= 1 {
+					None
+				} else {
+					Some(Dir{
+						depth: self.depth - 1,
+						c: self.c,
+						replyTx: self.replyTx,
+						replyRx: self.replyRx,
+					})
+				}
+			}
+		}
+
+		#[derive(Debug)]
+		pub enum DirAction {
+			// Down descends into the directory beneath this entry.
+			// Dir is used to send the contents of the directory.
+			Down(Dir),
+			// Next goes to the next entry in the current directory.
+			// Dir is used to send the rest of the current directory.
+			Next(Dir),
+			// Skip skips to the end of the current directory.
+			// Dir is used to send the rest of the parent directory.
+			Skip(Dir),
+			// End indicates the end of sending, when
+			// there can be no more entries sent.
+			End,
+		}
+
+		#[derive(Debug)]
+		pub enum FileAction {
+			// Down descends into the file contents beneath
+			// this entry. Data is used to send the actual data.
+			Down(Data),
+			// Next moves on to the next entry in the current directory.
+			// Dir is used to send the rest of the current directory.
+			Next(Dir),
+			// Skip skips to the end of the current directory.
+			// Dir is used to send the rest of the parent directory,
+			// or None if there is no parent directory.
+			Skip(Dir),
+			// End indicates the end of sending, when
+			// there can be no more entries sent.
+			End,
+		}
+
+		#[derive(Debug)]
+		pub struct Data {
+			c: Sender,
+			reply: mspc::Receiver<Action>,
+		}
+
+		impl Data {
+			pub async fn data(b: Vec<u8>) -> Result<DataAction>
+		}
+
+		#[derive(Debug)]
+		pub enum DataAction {
+			Next(Data)
+			Skip(Dir)
+		}
+	}
+
+
+	mod recv {
+		type Receiver = mpsc::Receiver<FsMsg>;
+
+		#[derive(Debug)]
+		pub struct Dir {
+			c: Receiver,
+		}
+
+		impl Root {
+			pub async fn dir() Result<(Stat, Dir>)
+		}
+
+		impl Dir {
+			pub async fn entry(self) Result<Entry> {
+				Ok(match self.c.receive() {
+					DirEntry(stat) =>
+						Entry::Dir(DirEntry{
+							c: self.c,
+						})
+					FileEntry(stat) =>
+						Entry::File(FileEntry{
+							c: self.c,
+						})
+					Data(_) =>
+						unreachable!("no data allowed at this level")
+					End =>
+						Entry::None
+				})
+			}
+		}
+
+		enum Entry {
+			File(FileEntry),
+			Dir(DirEntry),
+			None,
+		}
+
+		struct DirEntry {
+			pub async fn down(self) -> Result<Dir>
+			pub async fn next(self) -> Result<Dir>
+			pub async fn skip(self) -> Result<Option<Dir>>
+		}
+
+		struct FileEntry {
+			c: Receiver,
+		}
+
+		impl FileEntry {
+			pub async fn down(self) -> Result<File>
+			pub async fn next(self) -> Result<Dir>
+			pub async fn skip(self) -> Result<Option<Dir>>
+		}
+
+		struct File {_}
+
+		impl File {
+			pub async fn data(self) -> Result<Option<(Vec<u8>, File)>> {
+			}
+		}
+	}
