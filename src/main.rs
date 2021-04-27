@@ -1,4 +1,4 @@
 #[tokio::main]
 async fn main() {}
 
-mod fstream;
+pub mod fstream;

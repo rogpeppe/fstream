@@ -1,8 +1,8 @@
-use super::*;
-use snafu::{ensure, Backtrace, ErrorCompat, ResultExt, Snafu};
+use super::common::*;
+use snafu::{ResultExt};
 use tokio::sync::mpsc;
 
-type Sender = mpsc::Sender<FsMsg>;
+pub type Sender = mpsc::Sender<FsMsg>;
 
 #[derive(Debug)]
 pub struct Dir {
@@ -16,7 +16,8 @@ pub struct Root {
 	dir: Dir,
 }
 
-fn new_root(c: Sender) -> Root {
+// TODO how can we make this available only to the fstream module?
+pub fn new_root(c: Sender) -> Root {
 	let (reply_tx, reply_rx) = mpsc::channel(1);
 	Root {
 		dir: Dir {
@@ -46,9 +47,12 @@ impl Dir {
 			return ErrNotADirectory { entry }.fail();
 		}
 		self.c
-			.send(FsMsg(FsData::FileEntry(entry), self.reply_tx.clone()))
+			.send(FsMsg{
+				data: FsData::FileEntry(entry),
+				reply: self.reply_tx.clone(),
+			})
 			.await?;
-		Ok(match syncext::recv(&mut self.reply_rx).await? {
+		Ok(match recv(&mut self.reply_rx).await? {
 			Action::Down => FileAction::Down(Data {
 				c: self.c,
 				depth_n: self.depth_n + 1,
@@ -82,9 +86,12 @@ impl Dir {
 			return ErrNotADirectory { entry }.fail();
 		}
 		self.c
-			.send(FsMsg(FsData::DirEntry(entry), self.reply_tx.clone()))
+			.send(FsMsg{
+				data: FsData::DirEntry(entry),
+				reply: self.reply_tx.clone(),
+			})
 			.await?;
-		Ok(match syncext::recv(&mut self.reply_rx).await? {
+		Ok(match recv(&mut self.reply_rx).await? {
 			Action::Down => DirAction::Down(Dir {
 				depth_n: self.depth_n + 1,
 				c: self.c,
@@ -106,10 +113,13 @@ impl Dir {
 	// directory or None if the parent is the root.
 	pub async fn end(mut self) -> Result<Option<Dir>> {
 		self.c
-			.send(FsMsg(FsData::End, self.reply_tx.clone()))
+			.send(FsMsg{
+				data: FsData::End,
+				reply: self.reply_tx.clone(),
+			})
 			.await?;
 		// Note: it doesn't matter what the response is to an end-of-directory.
-		syncext::recv(&mut self.reply_rx).await?;
+		recv(&mut self.reply_rx).await?;
 		Ok(self.parent())
 	}
 
@@ -169,7 +179,7 @@ pub struct Data {
 }
 
 impl Data {
-	pub async fn data(b: Vec<u8>) -> Result<DataAction> {
+	pub async fn data(_b: Vec<u8>) -> Result<DataAction> {
 		todo!();
 	}
 }
