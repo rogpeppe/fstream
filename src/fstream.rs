@@ -16,6 +16,7 @@ pub use send::FileAction as SendFileAction;
 
 pub use recv::Root as RecvRoot;
 pub use recv::Dir as RecvDir;
+pub use recv::Entry as RecvEntry;
 pub use recv::DirEntryAction as RecvDirEntryAction;
 pub use recv::FileEntryAction as RecvFileEntryAction;
 pub use recv::File as RecvFile;

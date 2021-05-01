@@ -18,11 +18,11 @@ pub struct Root {
 impl Root {
 	// dir returns the top level directory entry and
 	// the directory that's underneath it.
-	pub async fn dir(mut self) -> common::Result<(common::DirEntry, Dir)> {
+	pub async fn dir(mut self) -> common::Result<(std::path::PathBuf, Dir)> {
 		let msg = common::recv(&mut self.c).await?;
-		if let common::FsData::DirEntry(entry) = msg.data {
+		if let common::FsData::Root(path) = msg.data {
 			msg.reply.send(common::Action::Down).await?;
-			Ok((entry, Dir{c: self.c, depth: 1}))
+			Ok((path, Dir{c: self.c, depth: 1}))
 		} else {
 			// TODO more specific error.
 			Err(common::ErrUnexpectedMessage.build())
