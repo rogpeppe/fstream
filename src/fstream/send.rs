@@ -30,11 +30,17 @@ pub fn new_root(c: Sender) -> Root {
 }
 
 impl Root {
-	pub async fn dir(self, entry: common::DirEntry) -> common::Result<Option<Dir>> {
-		match self.dir.dir(entry).await? {
-			DirAction::Down(dir) => Ok(Some(dir)),
-			_ => Ok(None),
-		}
+	pub async fn dir(mut self, path: String) -> common::Result<Option<Dir>> {
+		self.dir.c
+			.send(common::FsMsg{
+				data: common::FsData::Root(path),
+				reply: self.dir.reply_tx.clone(),
+			})
+			.await?;
+		Ok(match common::recv(&mut self.dir.reply_rx).await? {
+			common::Action::Down => Some(self.dir.down()),
+			_ => None,
+		})
 	}
 }
 
@@ -42,7 +48,7 @@ impl Dir {
 	// file sends a file entry. The name should always compare
 	// greater than the previous entry sent for the directory.
 	// It's an error if entry represents a directory.
-	pub async fn file(mut self, entry: common::DirEntry) -> common::Result<FileAction> {
+	pub async fn file(mut self, entry: common::DirEntry) -> common::Result<FileEntryAction> {
 		if Self::is_dir(&entry)? {
 			return common::ErrNotADirectory { entry }.fail();
 		}
@@ -53,20 +59,17 @@ impl Dir {
 			})
 			.await?;
 		Ok(match common::recv(&mut self.reply_rx).await? {
-			common::Action::Down => FileAction::Down(Data {
-				c: self.c,
-				depth_n: self.depth_n + 1,
-				reply_rx: self.reply_rx,
-				reply_tx: self.reply_tx,
+			common::Action::Down => FileEntryAction::Down(File {
+				dir: self.down(),
 			}),
 			common::Action::Skip => {
-				if let Some(parent) = self.parent() {
-					FileAction::Skip(parent)
+				if let Some(parent) = self.up() {
+					FileEntryAction::Skip(parent)
 				} else {
-					FileAction::End
+					FileEntryAction::End
 				}
-			}
-			common::Action::Next => FileAction::Next(self),
+			},
+			common::Action::Next => FileEntryAction::Next(self),
 		})
 	}
 
@@ -81,7 +84,7 @@ impl Dir {
 	// dir sends a directory entry. The name should always compare
 	// greater than the previous entry sent for the directory.
 	// It's an error if entry doesn't represent a directory.
-	pub async fn dir(mut self, entry: common::DirEntry) -> common::Result<DirAction> {
+	pub async fn dir(mut self, entry: common::DirEntry) -> common::Result<DirEntryAction> {
 		if !Self::is_dir(&entry)? {
 			return common::ErrNotADirectory { entry }.fail();
 		}
@@ -92,20 +95,20 @@ impl Dir {
 			})
 			.await?;
 		Ok(match common::recv(&mut self.reply_rx).await? {
-			common::Action::Down => DirAction::Down(Dir {
+			common::Action::Down => DirEntryAction::Down(Dir {
 				depth_n: self.depth_n + 1,
 				c: self.c,
 				reply_rx: self.reply_rx,
 				reply_tx: self.reply_tx,
 			}),
 			common::Action::Skip => {
-				if let Some(parent) = self.parent() {
-					DirAction::Skip(parent)
+				if let Some(parent) = self.up() {
+					DirEntryAction::Skip(parent)
 				} else {
-					DirAction::End
+					DirEntryAction::End
 				}
 			}
-			common::Action::Next => DirAction::Next(self),
+			common::Action::Next => DirEntryAction::Next(self),
 		})
 	}
 
@@ -120,10 +123,18 @@ impl Dir {
 			.await?;
 		// Note: it doesn't matter what the response is to an end-of-directory.
 		common::recv(&mut self.reply_rx).await?;
-		Ok(self.parent())
+		Ok(self.up())
 	}
 
-	fn parent(self) -> Option<Dir> {
+	fn down(self) -> Dir {
+		Dir {
+			depth_n: self.depth_n + 1,
+			c: self.c,
+			reply_tx: self.reply_tx,
+			reply_rx: self.reply_rx,
+		}
+	}
+	fn up(self) -> Option<Dir> {
 		if self.depth_n <= 1 {
 			None
 		} else {
@@ -138,7 +149,7 @@ impl Dir {
 }
 
 #[derive(Debug)]
-pub enum DirAction {
+pub enum DirEntryAction {
 	// Down descends into the directory beneath this entry.
 	// Dir is used to send the contents of the directory.
 	Down(Dir),
@@ -154,10 +165,10 @@ pub enum DirAction {
 }
 
 #[derive(Debug)]
-pub enum FileAction {
+pub enum FileEntryAction {
 	// Down descends into the file contents beneath
-	// this entry. Data is used to send the actual data.
-	Down(Data),
+	// this entry. File is used to send the actual data.
+	Down(File),
 	// Next moves on to the next entry in the current directory.
 	// Dir is used to send the rest of the current directory.
 	Next(Dir),
@@ -171,14 +182,11 @@ pub enum FileAction {
 }
 
 #[derive(Debug)]
-pub struct Data {
-	c: Sender,
-	depth_n: i32,
-	reply_tx: mpsc::Sender<common::Action>,
-	reply_rx: mpsc::Receiver<common::Action>,
+pub struct File {
+	dir: Dir,
 }
 
-impl Data {
+impl File {
 	pub async fn data(_b: Vec<u8>) -> common::Result<DataAction> {
 		todo!();
 	}
@@ -186,6 +194,6 @@ impl Data {
 
 #[derive(Debug)]
 pub enum DataAction {
-	Next(Data),
+	Next(File),
 	Skip(Dir),
 }

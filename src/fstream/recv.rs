@@ -57,12 +57,12 @@ impl Dir {
 		let msg = common::recv(&mut self.c).await?;
 		Ok(match msg.data {
 		common::FsData::DirEntry(entry) =>
-			Entry::Dir(entry, DirAction{
+			Entry::Dir(entry, DirEntryAction{
 				dir: self,
 				reply: msg.reply,
 			}),
 		common::FsData::FileEntry(entry) =>
-			Entry::File(entry, FileAction{
+			Entry::File(entry, FileEntryAction{
 				dir: self,
 				reply: msg.reply,
 			}),
@@ -79,17 +79,17 @@ impl Dir {
 }
 
 pub enum Entry {
-	File(common::DirEntry, FileAction),
-	Dir(common::DirEntry, DirAction),
+	File(common::DirEntry, FileEntryAction),
+	Dir(common::DirEntry, DirEntryAction),
 	End(Option<Dir>),
 }
 
-pub struct DirAction {
+pub struct DirEntryAction {
 	dir: Dir,
 	reply: mpsc::Sender<common::Action>,
 }
 
-impl DirAction {
+impl DirEntryAction {
 	pub async fn down(self) -> common::Result<Dir> {
 		self.reply.send(common::Action::Down).await?;
 		Ok(self.dir.down())
@@ -104,12 +104,12 @@ impl DirAction {
 	}
 }
 
-pub struct FileAction {
+pub struct FileEntryAction {
 	dir: Dir,
 	reply: mpsc::Sender<common::Action>,
 }
 
-impl FileAction {
+impl FileEntryAction {
 	pub async fn down(self) -> common::Result<File> {
 		self.reply.send(common::Action::Down).await?;
 		Ok(File{
@@ -126,11 +126,11 @@ impl FileAction {
 	}
 }
 
-struct File {
+pub struct File {
 	dir: Dir,
 }
 
-enum Data {
+pub enum Data {
 	Bytes(Vec<u8>, File),
 	End(Dir),
 }
