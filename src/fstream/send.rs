@@ -30,7 +30,7 @@ pub fn new_root(c: Sender) -> Root {
 }
 
 impl Root {
-	pub async fn dir(mut self, path: String) -> common::Result<Option<Dir>> {
+	pub async fn dir(mut self, path: std::path::PathBuf) -> common::Result<Option<Dir>> {
 		self.dir.c
 			.send(common::FsMsg{
 				data: common::FsData::Root(path),
@@ -95,12 +95,7 @@ impl Dir {
 			})
 			.await?;
 		Ok(match common::recv(&mut self.reply_rx).await? {
-			common::Action::Down => DirEntryAction::Down(Dir {
-				depth_n: self.depth_n + 1,
-				c: self.c,
-				reply_rx: self.reply_rx,
-				reply_tx: self.reply_tx,
-			}),
+			common::Action::Down => DirEntryAction::Down(self.down()),
 			common::Action::Skip => {
 				if let Some(parent) = self.up() {
 					DirEntryAction::Skip(parent)
@@ -187,13 +182,36 @@ pub struct File {
 }
 
 impl File {
-	pub async fn data(_b: Vec<u8>) -> common::Result<DataAction> {
-		todo!();
+	pub async fn data(mut self, b: Vec<u8>) -> common::Result<FileAction> {
+		self.dir.c
+			.send(common::FsMsg{
+				data: common::FsData::Data(b),
+				reply: self.dir.reply_tx.clone(),
+			})
+			.await?;
+		Ok(match common::recv(&mut self.dir.reply_rx).await? {
+			common::Action::Down | common::Action::Next =>
+				FileAction::Next(self),
+			common::Action::Skip =>
+				FileAction::Skip(self.dir.up().unwrap()),
+		})
+	}
+
+	pub async fn end(mut self) -> common::Result<Dir> {
+		self.dir.c
+			.send(common::FsMsg{
+				data: common::FsData::End,
+				reply: self.dir.reply_tx.clone(),
+			})
+			.await?;
+		// Note: it doesn't matter what the response is to an end-of-file.
+		common::recv(&mut self.dir.reply_rx).await?;
+		Ok(self.dir.up().unwrap())
 	}
 }
 
 #[derive(Debug)]
-pub enum DataAction {
+pub enum FileAction {
 	Next(File),
 	Skip(Dir),
 }

@@ -19,7 +19,7 @@ pub struct FsMsg{
 #[derive(Debug)]
 pub enum FsData {
 	// Root represents the root entry.
-	Root(String),
+	Root(std::path::PathBuf),
 	FileEntry(DirEntry),
 	DirEntry(DirEntry),
 	Data(Vec<u8>),
