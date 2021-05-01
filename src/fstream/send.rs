@@ -1,15 +1,15 @@
-use super::common::*;
+use super::common;
 use snafu::{ResultExt};
 use tokio::sync::mpsc;
 
-pub type Sender = mpsc::Sender<FsMsg>;
+pub type Sender = mpsc::Sender<common::FsMsg>;
 
 #[derive(Debug)]
 pub struct Dir {
 	depth_n: i32,
 	c: Sender,
-	reply_tx: mpsc::Sender<Action>,
-	reply_rx: mpsc::Receiver<Action>,
+	reply_tx: mpsc::Sender<common::Action>,
+	reply_rx: mpsc::Receiver<common::Action>,
 }
 
 pub struct Root {
@@ -30,7 +30,7 @@ pub fn new_root(c: Sender) -> Root {
 }
 
 impl Root {
-	pub async fn dir(self, entry: DirEntry) -> Result<Option<Dir>> {
+	pub async fn dir(self, entry: common::DirEntry) -> common::Result<Option<Dir>> {
 		match self.dir.dir(entry).await? {
 			DirAction::Down(dir) => Ok(Some(dir)),
 			_ => Ok(None),
@@ -42,31 +42,31 @@ impl Dir {
 	// file sends a file entry. The name should always compare
 	// greater than the previous entry sent for the directory.
 	// It's an error if entry represents a directory.
-	pub async fn file(mut self, entry: DirEntry) -> Result<FileAction> {
+	pub async fn file(mut self, entry: common::DirEntry) -> common::Result<FileAction> {
 		if Self::is_dir(&entry)? {
-			return ErrNotADirectory { entry }.fail();
+			return common::ErrNotADirectory { entry }.fail();
 		}
 		self.c
-			.send(FsMsg{
-				data: FsData::FileEntry(entry),
+			.send(common::FsMsg{
+				data: common::FsData::FileEntry(entry),
 				reply: self.reply_tx.clone(),
 			})
 			.await?;
-		Ok(match recv(&mut self.reply_rx).await? {
-			Action::Down => FileAction::Down(Data {
+		Ok(match common::recv(&mut self.reply_rx).await? {
+			common::Action::Down => FileAction::Down(Data {
 				c: self.c,
 				depth_n: self.depth_n + 1,
 				reply_rx: self.reply_rx,
 				reply_tx: self.reply_tx,
 			}),
-			Action::Skip => {
+			common::Action::Skip => {
 				if let Some(parent) = self.parent() {
 					FileAction::Skip(parent)
 				} else {
 					FileAction::End
 				}
 			}
-			Action::Next => FileAction::Next(self),
+			common::Action::Next => FileAction::Next(self),
 		})
 	}
 
@@ -74,52 +74,52 @@ impl Dir {
 		self.depth_n
 	}
 
-	fn is_dir(entry: &DirEntry) -> Result<bool> {
-		Ok(entry.metadata().context(ErrIO)?.is_dir())
+	fn is_dir(entry: &common::DirEntry) -> common::Result<bool> {
+		Ok(entry.metadata().context(common::ErrIO)?.is_dir())
 	}
 
 	// dir sends a directory entry. The name should always compare
 	// greater than the previous entry sent for the directory.
 	// It's an error if entry doesn't represent a directory.
-	pub async fn dir(mut self, entry: DirEntry) -> Result<DirAction> {
+	pub async fn dir(mut self, entry: common::DirEntry) -> common::Result<DirAction> {
 		if !Self::is_dir(&entry)? {
-			return ErrNotADirectory { entry }.fail();
+			return common::ErrNotADirectory { entry }.fail();
 		}
 		self.c
-			.send(FsMsg{
-				data: FsData::DirEntry(entry),
+			.send(common::FsMsg{
+				data: common::FsData::DirEntry(entry),
 				reply: self.reply_tx.clone(),
 			})
 			.await?;
-		Ok(match recv(&mut self.reply_rx).await? {
-			Action::Down => DirAction::Down(Dir {
+		Ok(match common::recv(&mut self.reply_rx).await? {
+			common::Action::Down => DirAction::Down(Dir {
 				depth_n: self.depth_n + 1,
 				c: self.c,
 				reply_rx: self.reply_rx,
 				reply_tx: self.reply_tx,
 			}),
-			Action::Skip => {
+			common::Action::Skip => {
 				if let Some(parent) = self.parent() {
 					DirAction::Skip(parent)
 				} else {
 					DirAction::End
 				}
 			}
-			Action::Next => DirAction::Next(self),
+			common::Action::Next => DirAction::Next(self),
 		})
 	}
 
 	// end indicates the end of the directory. It returns the parent
 	// directory or None if the parent is the root.
-	pub async fn end(mut self) -> Result<Option<Dir>> {
+	pub async fn end(mut self) -> common::Result<Option<Dir>> {
 		self.c
-			.send(FsMsg{
-				data: FsData::End,
+			.send(common::FsMsg{
+				data: common::FsData::End,
 				reply: self.reply_tx.clone(),
 			})
 			.await?;
 		// Note: it doesn't matter what the response is to an end-of-directory.
-		recv(&mut self.reply_rx).await?;
+		common::recv(&mut self.reply_rx).await?;
 		Ok(self.parent())
 	}
 
@@ -174,12 +174,12 @@ pub enum FileAction {
 pub struct Data {
 	c: Sender,
 	depth_n: i32,
-	reply_tx: mpsc::Sender<Action>,
-	reply_rx: mpsc::Receiver<Action>,
+	reply_tx: mpsc::Sender<common::Action>,
+	reply_rx: mpsc::Receiver<common::Action>,
 }
 
 impl Data {
-	pub async fn data(_b: Vec<u8>) -> Result<DataAction> {
+	pub async fn data(_b: Vec<u8>) -> common::Result<DataAction> {
 		todo!();
 	}
 }
