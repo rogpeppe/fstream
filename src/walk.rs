@@ -17,6 +17,7 @@ pub enum Error {
     },
 }
 
+// walk walks the directory hierarchy rooted at the given path, sending the results to root.
 pub async fn walk<P: AsRef<std::path::Path>>(path_ref: P, root: fstream::SendRoot) -> Result<()> {
     let mut path = std::path::PathBuf::new();
     path.push(path_ref.as_ref());
@@ -32,7 +33,7 @@ pub async fn walk<P: AsRef<std::path::Path>>(path_ref: P, root: fstream::SendRoo
 }
 
 #[async_recursion]
-pub async fn walk_dir(
+async fn walk_dir(
     path: &mut std::path::PathBuf,
     dir: fstream::SendDir,
 ) -> Result<Option<fstream::SendDir>> {

@@ -8,6 +8,8 @@ pub enum Error {
     ErrFstream { source: fstream::Error },
 }
 
+// filter filters by reading from recv_root and sending to send_root,
+// keeping only entries for which keep returns true.
 pub async fn filter<F>(
     recv_root: fstream::RecvRoot,
     send_root: fstream::SendRoot,
@@ -25,7 +27,7 @@ where
     )
 }
 
-pub async fn filter_dir<F>(
+async fn filter_dir<F>(
     path: &mut std::path::PathBuf,
     recv_dir: fstream::RecvDir,
     send_dir: fstream::SendDir,

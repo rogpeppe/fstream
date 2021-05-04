@@ -8,6 +8,7 @@ pub enum Error {
     ErrFstream { source: fstream::Error },
 }
 
+// print prints some information about all the entries in root.
 pub async fn print(root: fstream::RecvRoot) -> Result<()> {
     let (path, dir) = root.dir().await.context(ErrFstream)?;
     let mut path = path;
@@ -15,7 +16,7 @@ pub async fn print(root: fstream::RecvRoot) -> Result<()> {
     Ok(())
 }
 
-pub async fn print_dir(path: &mut std::path::PathBuf, dir: fstream::RecvDir) -> Result<()> {
+async fn print_dir(path: &mut std::path::PathBuf, dir: fstream::RecvDir) -> Result<()> {
     let mut dir = dir;
     loop {
         match dir.entry().await.context(ErrFstream)? {
