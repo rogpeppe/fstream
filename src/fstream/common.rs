@@ -1,5 +1,6 @@
 use snafu::Snafu;
 use tokio::sync::mpsc;
+use tokio::task;
 
 // Action holds an action that a receiver decides
 // to take after receiving a value.
@@ -68,6 +69,8 @@ pub enum Error {
     ErrChanSend { type_name: String },
     #[snafu(display("unexpected message type received"))]
     ErrUnexpectedMessage,
+    #[snafu(display("running task failed"))]
+    ErrTaskJoin{ source: task::JoinError },
 }
 
 impl<T> From<mpsc::error::SendError<T>> for Error {

@@ -6,6 +6,7 @@ mod send;
 
 pub use common::DirEntry;
 pub use common::Error;
+pub use common::Result;
 
 pub use send::Dir as SendDir;
 pub use send::DirEntryAction as SendDirEntryAction;
