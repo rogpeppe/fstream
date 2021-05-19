@@ -14,17 +14,14 @@ pub enum Error {
 }
 
 fn parse_pipeline(lex: &mut Lexer) -> Result<ASTNode> {
-    println!("parse_pipeline {{");
     let mut node = ASTNode::Command(parse_command(lex)?);
     loop {
-        println!("in pipeline loop {:?}", lex.peek());
         match lex.peek() {
             Some(Token::Pipe) => {
                 lex.next();
                 node = ASTNode::Pipe(Box::new(node), parse_command(lex)?);
             }
             Some(Token::CloseCurly) | None => {
-                println!("}}");
                 return Ok(node);
             }
             tok => {
@@ -38,7 +35,6 @@ fn parse_pipeline(lex: &mut Lexer) -> Result<ASTNode> {
 }
 
 fn parse_command(lex: &mut Lexer) -> Result<Command> {
-    println!("parse_command {{");
     let name = match lex.next() {
         Some(Token::Word) => lex.string(),
         Some(Token::QuotedWord) => lex.string(),
@@ -51,7 +47,6 @@ fn parse_command(lex: &mut Lexer) -> Result<Command> {
     };
     let mut args = vec![];
     loop {
-        println!("command loop: {:?}", lex.peek());
         match lex.peek() {
             Some(Token::Word) => {
                 args.push(ASTNode::Word(lex.source[lex.lexer.span()].to_string()));
@@ -73,7 +68,6 @@ fn parse_command(lex: &mut Lexer) -> Result<Command> {
                 }
             }
             None | Some(Token::Pipe) | Some(Token::CloseCurly) => {
-                println!("}} XXXX {:?}", lex.peek());
                 return Ok(Command {
                     name: name,
                     args: args,
@@ -181,11 +175,11 @@ impl<'source> Iterator for Lexer<'source> {
     type Item = Token;
 
     fn next(&mut self) -> Option<Token> {
-        dbg!(if let Some(peeked) = self.peeked.take() {
+        if let Some(peeked) = self.peeked.take() {
             peeked
         } else {
             self.lexer.next()
-        })
+        }
     }
 }
 // TODO flags with values: -foo=bar, -foo='bar baz'

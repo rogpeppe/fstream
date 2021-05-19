@@ -12,7 +12,7 @@ pub mod walk;
 
 #[tokio::main]
 async fn main() {
-    run("filter {filtetype d}").await.expect("pipeline failed");
+    run("filter {mode +d}").await.expect("pipeline failed");
 }
 
 async fn run(expr: &str) -> Result<()> {
@@ -30,7 +30,7 @@ async fn run(expr: &str) -> Result<()> {
 }
 
 fn compile(expr: &str, cmds: &Commands) -> Result<parse::ASTNode> {
-    let node = parse::parse("walk / | filter {filetype d} | print")?;
+    let node = parse::parse(expr)?;
     let node = depipe(node);
     let node = typecheck(node, &cmds)?;
     let node = cmds.convert(node, Type::Void)?;
