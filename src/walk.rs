@@ -3,7 +3,44 @@ use async_recursion::async_recursion;
 use snafu::{ResultExt, Snafu};
 use std::io::Read;
 
+use super::CommandType;
+use super::Value;
+
 pub type Result<T> = std::result::Result<T, Error>;
+
+pub fn new_command() -> impl super::Command {
+    Command(CommandType {
+        flags: vec![],
+        args: vec![super::Type::String],
+        var_args: None,
+        ret: super::Type::Fs,
+    })
+}
+
+struct Command(CommandType);
+
+impl super::Command for Command {
+    fn fs_type(&self) -> &super::CommandType {
+        return &self.0;
+    }
+    fn start(
+        &self,
+        tasks: &mut super::Tasks,
+        _flags: Vec<String>,
+        args: Vec<Value>,
+        _rest: Vec<Value>,
+    ) -> fstream::Result<Value> {
+        let mut args = args;
+        let path = args.pop().unwrap().as_string()?;
+        let (send_root, recv_root) = fstream::new();
+        tasks.add(tokio::spawn(async {
+            // TODO avoid unwrap here.
+            walk(path, send_root).await.unwrap();
+            Ok(())
+        }));
+        Ok(Value::Fs(recv_root))
+    }
+}
 
 #[derive(Debug, Snafu)]
 pub enum Error {

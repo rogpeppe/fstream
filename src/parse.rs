@@ -1,11 +1,17 @@
 use logos::Logos;
+use snafu::Snafu;
 
 pub fn parse(s: &str) -> Result<ASTNode> {
     let mut lex = Lexer::new(s);
     parse_pipeline(&mut lex)
 }
 
-type Result<T> = std::result::Result<T, String>;
+type Result<T> = std::result::Result<T, Error>;
+
+#[derive(Debug, Snafu)]
+pub enum Error {
+    ErrParse { msg: String },
+}
 
 fn parse_pipeline(lex: &mut Lexer) -> Result<ASTNode> {
     println!("parse_pipeline {{");
@@ -22,7 +28,10 @@ fn parse_pipeline(lex: &mut Lexer) -> Result<ASTNode> {
                 return Ok(node);
             }
             tok => {
-                return Err(format!("expected pipe, got {:?}", tok).to_string());
+                return Err(ErrParse {
+                    msg: format!("expected pipe, got {:?}", tok).to_string(),
+                }
+                .build());
             }
         }
     }
@@ -34,7 +43,10 @@ fn parse_command(lex: &mut Lexer) -> Result<Command> {
         Some(Token::Word) => lex.string(),
         Some(Token::QuotedWord) => lex.string(),
         tok => {
-            return Err(format!("expected word, got {:?}", tok).to_string());
+            return Err(ErrParse {
+                msg: format!("expected word, got {:?}", tok).to_string(),
+            }
+            .build());
         }
     };
     let mut args = vec![];
@@ -52,7 +64,12 @@ fn parse_command(lex: &mut Lexer) -> Result<Command> {
                 args.push(parse_pipeline(lex)?);
                 match lex.peek() {
                     Some(Token::CloseCurly) => (),
-                    _tok => return Err("unexpected token".to_string()), // TODO more info about tok
+                    _tok => {
+                        return Err(ErrParse {
+                            msg: "unexpected token".to_string(),
+                        }
+                        .build())
+                    } // TODO more info about tok
                 }
             }
             None | Some(Token::Pipe) | Some(Token::CloseCurly) => {
@@ -63,7 +80,10 @@ fn parse_command(lex: &mut Lexer) -> Result<Command> {
                 });
             }
             _ => {
-                return Err("unexpected token".to_string());
+                return Err(ErrParse {
+                    msg: "unexpected token".to_string(),
+                }
+                .build());
             }
         }
         lex.next();

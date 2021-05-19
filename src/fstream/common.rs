@@ -70,7 +70,7 @@ pub enum Error {
     #[snafu(display("unexpected message type received"))]
     ErrUnexpectedMessage,
     #[snafu(display("running task failed"))]
-    ErrTaskJoin{ source: task::JoinError },
+    ErrTaskJoin { source: task::JoinError },
 }
 
 impl<T> From<mpsc::error::SendError<T>> for Error {
