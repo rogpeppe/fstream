@@ -6,13 +6,16 @@ use tokio::task;
 
 pub mod filter;
 pub mod fstream;
+pub mod mode;
 pub mod parse;
 pub mod print;
 pub mod walk;
 
 #[tokio::main]
 async fn main() {
-    run("filter {mode +d}").await.expect("pipeline failed");
+    run("walk /tmp | filter {mode d}")
+        .await
+        .expect("pipeline failed");
 }
 
 async fn run(expr: &str) -> Result<()> {
@@ -84,6 +87,7 @@ impl Commands {
             ("print", Box::new(print::new_command())),
             ("walk", Box::new(walk::new_command())),
             ("filter", Box::new(filter::new_command())),
+            ("mode", Box::new(mode::new_command())),
         ];
         let mut map = Map::new();
         for (name, cmd) in list {
@@ -111,11 +115,12 @@ impl Commands {
                 unreachable!("pipes should have been converted to commands by this stage");
             }
         };
+        let node_descr = format!("{}", &node);
         if let Some(node) = self.convert1(node, ntype, to) {
             Ok(node)
         } else {
             Err(ErrConvert {
-                //node: format!("{:?}", node),
+                node: node_descr,
                 from: ntype,
                 to: to,
             }
@@ -288,35 +293,15 @@ impl Tasks {
 
 #[derive(Debug, Snafu)]
 enum Error {
-    ErrTaskJoin {
-        source: task::JoinError,
-    },
-    ErrFstream {
-        source: fstream::Error,
-    },
-    ErrPrint {
-        source: print::Error,
-    },
-    ErrWalk {
-        source: walk::Error,
-    },
-    ErrFilter {
-        source: filter::Error,
-    },
-    ErrParse {
-        source: parse::Error,
-    },
-    ErrCommandNotFound {
-        name: String,
-    },
-    ErrConvert {
-        //node: String,
-        from: Type,
-        to: Type,
-    },
-    ErrTooFewArgs {
-        name: String,
-    },
+    ErrTaskJoin { source: task::JoinError },
+    ErrFstream { source: fstream::Error },
+    ErrPrint { source: print::Error },
+    ErrWalk { source: walk::Error },
+    ErrFilter { source: filter::Error },
+    ErrParse { source: parse::Error },
+    ErrCommandNotFound { name: String },
+    ErrConvert { node: String, from: Type, to: Type },
+    ErrTooFewArgs { name: String },
 }
 
 impl From<task::JoinError> for Error {

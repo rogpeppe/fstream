@@ -57,6 +57,8 @@ pub enum FsData {
 #[derive(Debug, Snafu)]
 #[snafu(visibility = "pub")]
 pub enum Error {
+    #[snafu(display("bad usage: {}", msg))]
+    ErrUsage { msg: String },
     #[snafu(display("unexpected directory {}", entry.path().display()))]
     ErrIsADirectory { entry: DirEntry },
     #[snafu(display("unexpected non-directory {}", entry.path().display()))]
