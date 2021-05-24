@@ -20,7 +20,7 @@ pub enum Action {
 
 pub type DirEntry = std::fs::DirEntry;
 
-// FsMsg is the value that's sent on the channel.
+// FsMsg is the value that's sent on an Fs channel.
 // It consists of some information about what's being
 // sent and a reply channel that the receiver
 // sends a reply on to indicate what to do next.
@@ -28,6 +28,13 @@ pub type DirEntry = std::fs::DirEntry;
 pub struct FsMsg {
     pub data: FsData,
     pub reply: mpsc::Sender<Action>,
+}
+
+// EntryMsg is the value that's sent on an Entry channel.
+pub struct EntryMsg {
+    pub entry: DirEntry,
+    pub path: std::path::PathBuf,
+    pub depth: i32,
 }
 
 // FsData holds one of the possible items of

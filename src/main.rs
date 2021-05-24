@@ -10,10 +10,11 @@ pub mod mode;
 pub mod parse;
 pub mod print;
 pub mod walk;
+pub mod or;
 
 #[tokio::main]
 async fn main() {
-    run("walk /tmp | filter {mode d}")
+    run("walk /tmp | filter {mode d | or {mode d}}")
         .await
         .expect("pipeline failed");
 }
@@ -88,6 +89,7 @@ impl Commands {
             ("walk", Box::new(walk::new_command())),
             ("filter", Box::new(filter::new_command())),
             ("mode", Box::new(mode::new_command())),
+            ("or", Box::new(or::new_command())),
         ];
         let mut map = Map::new();
         for (name, cmd) in list {
@@ -347,7 +349,7 @@ pub trait Command {
         tasks: &mut Tasks,
         flags: Vec<String>,
         args: Vec<Value>,
-        rest: Vec<Value>,
+        rest: Vec<Value>,			// TODO remove this
     ) -> fstream::Result<Value>;
 }
 
