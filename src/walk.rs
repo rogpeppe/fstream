@@ -8,20 +8,23 @@ use super::Value;
 
 pub type Result<T> = std::result::Result<T, Error>;
 
-pub fn new_command() -> impl super::Command {
+pub fn new_command(types: fs::Types) -> impl super::Command {
     Command(CommandType {
         flags: vec![],
-        args: vec![super::Type::String],
+        args: vec![types::string()],
         var_args: None,
-        ret: super::Type::Fs,
+        ret: types::fs(),
     })
 }
 
-struct Command(CommandType);
+struct Command{
+	types: fs::Types,
+	ctype: CommandType,
+};
 
 impl super::Command for Command {
     fn fs_type(&self) -> &super::CommandType {
-        return &self.0;
+        return &self.ctype;
     }
     fn start(
         &self,
@@ -31,14 +34,15 @@ impl super::Command for Command {
         _rest: Vec<Value>,
     ) -> fstream::Result<Value> {
         let mut args = args;
-        let path = args.pop().unwrap().as_string()?;
+
+        let path = self.types.to_string(args.pop().unwrap())?;
         let (send_root, recv_root) = fstream::new();
         tasks.add(tokio::spawn(async {
             // TODO avoid unwrap here.
             walk(path, send_root).await.unwrap();
             Ok(())
         }));
-        Ok(Value::Fs(recv_root))
+        Ok(self.types.from_fs(recv_root))
     }
 }
 
